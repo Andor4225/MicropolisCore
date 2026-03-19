@@ -225,25 +225,26 @@ void Micropolis::getHistoryRange(int historyType, int historyScale,
         return;
     }
 
-    short *history = NULL;
+    // MODERNIZATION (Phase 2): Use .data() for pointer access to vectors
+    short *history = nullptr;
     switch (historyType) {
         case HISTORY_TYPE_RES:
-            history = resHist;
+            history = resHist.data();
             break;
         case HISTORY_TYPE_COM:
-            history = comHist;
+            history = comHist.data();
             break;
         case HISTORY_TYPE_IND:
-            history = indHist;
+            history = indHist.data();
             break;
         case HISTORY_TYPE_MONEY:
-            history = moneyHist;
+            history = moneyHist.data();
             break;
         case HISTORY_TYPE_CRIME:
-            history = crimeHist;
+            history = crimeHist.data();
             break;
         case HISTORY_TYPE_POLLUTION:
-            history = pollutionHist;
+            history = pollutionHist.data();
             break;
         default:
             NOT_REACHED();
@@ -294,25 +295,26 @@ short Micropolis::getHistory(int historyType, int historyScale,
         return 0;
     }
 
-    short *history = NULL;
+    // MODERNIZATION (Phase 2): Use .data() for pointer access to vectors
+    short *history = nullptr;
     switch (historyType) {
         case HISTORY_TYPE_RES:
-            history = resHist;
+            history = resHist.data();
             break;
         case HISTORY_TYPE_COM:
-            history = comHist;
+            history = comHist.data();
             break;
         case HISTORY_TYPE_IND:
-            history = indHist;
+            history = indHist.data();
             break;
         case HISTORY_TYPE_MONEY:
-            history = moneyHist;
+            history = moneyHist.data();
             break;
         case HISTORY_TYPE_CRIME:
-            history = crimeHist;
+            history = crimeHist.data();
             break;
         case HISTORY_TYPE_POLLUTION:
-            history = pollutionHist;
+            history = pollutionHist.data();
             break;
         default:
             NOT_REACHED();
@@ -354,25 +356,26 @@ void Micropolis::setHistory(int historyType, int historyScale,
         return;
     }
 
-    short *history = NULL;
+    // MODERNIZATION (Phase 2): Use .data() for pointer access to vectors
+    short *history = nullptr;
     switch (historyType) {
         case HISTORY_TYPE_RES:
-            history = resHist;
+            history = resHist.data();
             break;
         case HISTORY_TYPE_COM:
-            history = comHist;
+            history = comHist.data();
             break;
         case HISTORY_TYPE_IND:
-            history = indHist;
+            history = indHist.data();
             break;
         case HISTORY_TYPE_MONEY:
-            history = moneyHist;
+            history = moneyHist.data();
             break;
         case HISTORY_TYPE_CRIME:
-            history = crimeHist;
+            history = crimeHist.data();
             break;
         case HISTORY_TYPE_POLLUTION:
-            history = pollutionHist;
+            history = pollutionHist.data();
             break;
         default:
             NOT_REACHED();

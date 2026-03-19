@@ -60,7 +60,7 @@
  * NOT APPLY TO YOU.
  */
 
-/** 
+/**
  * @file data_types.h
  * @brief Commonly used data types in Micropolis game engine.
  *
@@ -71,12 +71,24 @@
  * readability across the game engine's codebase. By abstracting data
  * types in this manner, the code maintains flexibility and ease of
  * maintenance.
+ *
+ * MODERNIZATION NOTE (Phase 2):
+ * - Added fixed-width types for cross-platform consistency
+ * - Added Funds type (int64_t) for financial calculations to prevent overflow
+ * - Legacy types (Byte, Ptr, Quad, UQuad) retained for backward compatibility
  */
 
 
 #ifndef H_DATA_TYPES
 #define H_DATA_TYPES
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+// ============================================================================
+// Legacy type definitions (retained for backward compatibility)
+// ============================================================================
 
 typedef unsigned char Byte;
 
@@ -85,6 +97,50 @@ typedef Byte *Ptr;
 typedef long Quad;
 
 typedef unsigned long UQuad;
+
+// ============================================================================
+// Modern type definitions (Phase 2 modernization)
+// ============================================================================
+
+/**
+ * @brief Fixed-width integer types for cross-platform consistency
+ */
+using Int8   = std::int8_t;
+using Int16  = std::int16_t;
+using Int32  = std::int32_t;
+using Int64  = std::int64_t;
+using UInt8  = std::uint8_t;
+using UInt16 = std::uint16_t;
+using UInt32 = std::uint32_t;
+using UInt64 = std::uint64_t;
+
+/**
+ * @brief Funds type for financial calculations.
+ *
+ * Using int64_t prevents overflow exploits that could occur with
+ * 16-bit or 32-bit integers. A city generating $1M/year for 1000
+ * years would only reach ~$1B, well within int64_t range.
+ *
+ * Maximum value: 9,223,372,036,854,775,807 (~$9.2 quintillion)
+ */
+using Funds = std::int64_t;
+
+/**
+ * @brief Population type for city population tracking.
+ *
+ * Using int64_t to support extremely large cities without overflow.
+ */
+using Population = std::int64_t;
+
+/**
+ * @brief Map tile value type.
+ */
+using MapTile = std::uint16_t;
+
+/**
+ * @brief Map coordinate type.
+ */
+using MapCoord = std::int16_t;
 
 
 #endif

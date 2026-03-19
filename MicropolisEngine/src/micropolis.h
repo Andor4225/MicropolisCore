@@ -84,26 +84,8 @@
 // Includes
 
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <string.h>
-#include <ctype.h>
-#include <errno.h>
-#include <math.h>
-#include <cstdarg>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <sys/file.h>
-#include <sys/types.h>
-
-#include <string>
-#include <vector>
-#include <map>
-
-#include <emscripten.h>
-#include <emscripten/bind.h>
+// Platform abstraction layer (handles Windows/POSIX/Emscripten differences)
+#include "platform.h"
 
 #include "data_types.h"
 #include "map_type.h"
@@ -112,6 +94,7 @@
 #include "frontendmessage.h"
 #include "tool.h"
 #include "callback.h"
+#include "save_format.h"
 
 
 ////////////////////////////////////////////////////////////////////////
@@ -205,12 +188,14 @@ static const int CITYTIMES_PER_MONTH = 4;
 static const int CITYTIMES_PER_YEAR = CITYTIMES_PER_MONTH * 12;
 
 /**
- * The number of history entries.
+ * The number of history entries (in bytes for legacy allocation).
+ * @deprecated Use HISTORY_ELEMENT_COUNT for actual element count.
  */
 static const int HISTORY_LENGTH = 480;
 
 /**
- * The number of miscellaneous history entries.
+ * The number of miscellaneous history entries (in bytes for legacy allocation).
+ * @deprecated Use MISC_HISTORY_ELEMENT_COUNT for actual element count.
  */
 static const int MISC_HISTORY_LENGTH = 240;
 
@@ -219,6 +204,17 @@ static const int MISC_HISTORY_LENGTH = 240;
  * @todo It is not really a count of histories, rename to something else?
  */
 static const int HISTORY_COUNT = 120;
+
+/**
+ * Actual number of elements in history arrays (HISTORY_LENGTH / sizeof(short)).
+ * Used for: resHist, comHist, indHist, moneyHist, pollutionHist, crimeHist.
+ */
+static const int HISTORY_ELEMENT_COUNT = HISTORY_LENGTH / sizeof(short);
+
+/**
+ * Actual number of elements in miscHist array (MISC_HISTORY_LENGTH / sizeof(short)).
+ */
+static const int MISC_HISTORY_ELEMENT_COUNT = MISC_HISTORY_LENGTH / sizeof(short);
 
 /**
  * The size of the power stack.
@@ -1163,62 +1159,72 @@ public:
 
     /**
      * Spending on roads.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad roadSpend;
+    Funds roadSpend;
 
     /**
      * Spending on police stations.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad policeSpend;
+    Funds policeSpend;
 
     /**
      * Spending on fire stations.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad fireSpend;
+    Funds fireSpend;
 
     /**
      * Requested funds for roads.
      *
      * Depends on number of roads, rails, and game level.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad roadFund;
+    Funds roadFund;
 
     /**
      * Requested funds for police stations.
      *
      * Depends on police station population.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad policeFund;
+    Funds policeFund;
 
     /**
      * Requested funds for fire stations.
      *
      * Depends on fire station population.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad fireFund;
+    Funds fireFund;
 
     /**
      * Ratio of road spending over road funding, times #MAX_ROAD_EFFECT.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad roadEffect;
+    Funds roadEffect;
 
     /**
      * Ratio of police spending over police funding, times #MAX_POLICE_EFFECT.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad policeEffect;
+    Funds policeEffect;
 
     /**
      * Ratio of fire spending over fire funding, times #MAX_FIRE_EFFECT.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad fireEffect;
+    Funds fireEffect;
 
     /**
      * Funds from taxes.
      *
      * Depends on total population, average land value, city tax, and
      * game level.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad taxFund;
+    Funds taxFund;
 
     /**
      * City tax rate.
@@ -1339,38 +1345,45 @@ public:
 
     /**
      * Residential population history.
+     * Size: HISTORY_ELEMENT_COUNT (240) elements.
      */
-    short *resHist;
+    std::vector<short> resHist;
 
     /**
      * Commercial population history.
+     * Size: HISTORY_ELEMENT_COUNT (240) elements.
      */
-    short *comHist;
+    std::vector<short> comHist;
 
     /**
      * Industrial population history.
+     * Size: HISTORY_ELEMENT_COUNT (240) elements.
      */
-    short *indHist;
+    std::vector<short> indHist;
 
     /**
      * Money history.
+     * Size: HISTORY_ELEMENT_COUNT (240) elements.
      */
-    short *moneyHist;
+    std::vector<short> moneyHist;
 
     /**
      * Pollution history.
+     * Size: HISTORY_ELEMENT_COUNT (240) elements.
      */
-    short *pollutionHist;
+    std::vector<short> pollutionHist;
 
     /**
      * Crime history.
+     * Size: HISTORY_ELEMENT_COUNT (240) elements.
      */
-    short *crimeHist;
+    std::vector<short> crimeHist;
 
     /**
      * Memory used to save miscelaneous game values in save file.
+     * Size: MISC_HISTORY_ELEMENT_COUNT (120) elements.
      */
-    short *miscHist;
+    std::vector<short> miscHist;
 
     //@}
 
@@ -1393,10 +1406,12 @@ private:
 
 
     /**
-     * Memory for map array.
+     * Memory for map array (contiguous storage).
+     * Size: WORLD_W * WORLD_H elements.
+     * The map[] pointer array provides indexed access into this storage.
      */
-    unsigned short *mapBase;
-    unsigned short *mopBase;
+    std::vector<unsigned short> mapBaseStorage;
+    std::vector<unsigned short> mopBaseStorage;
 
 
     void initMapArrays();
@@ -1447,18 +1462,21 @@ public:
 
     /**
      * Amount of road funding granted.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad roadValue;
+    Funds roadValue;
 
     /**
      * Amount of police funding granted.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad policeValue;
+    Funds policeValue;
 
     /**
      * Amount of fire station funding granted.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad fireValue;
+    Funds fireValue;
 
     /**
      * Flag set when budget window needs to be updated.
@@ -1573,15 +1591,17 @@ public:
      * City population.
      *
      * Depends of ResPop, ComPop and IndPop.
+     * MODERNIZATION (Phase 2): Changed from Quad to Population (int64_t) for overflow safety.
      */
-    Quad cityPop;
+    Population cityPop;
 
     /**
      * Change in the city population.
      *
      * Depends on last cityPop.
+     * MODERNIZATION (Phase 2): Changed from Quad to Population (int64_t) for overflow safety.
      */
-    Quad cityPopDelta;
+    Population cityPopDelta;
 
     /**
      * City assessed value.
@@ -1590,8 +1610,9 @@ public:
      * fireStationPop, hospitalPop, stadiumPop, seaportPop,
      * airportPop, coalPowerPop, and nuclearPowerPop, and their
      * respective values.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
      */
-    Quad cityAssessedValue;
+    Funds cityAssessedValue;
 
     CityClass cityClass; ///< City class, affected by city population.
 
@@ -1644,8 +1665,8 @@ private:
 
     void doPopNum();
 
-    Quad getPopulation();
-    CityClass getCityClass(Quad cityPop);
+    Population getPopulation();
+    CityClass getCityClass(Population cityPop);
 
     void doProblems(short problemTable[PROBNUM]);
 
@@ -1692,6 +1713,50 @@ public:
     void didntSaveCity(const std::string &msg);
 
     void saveCityAs(const std::string &filename);
+
+    ////////////////////////////////////////////////////////////////////////
+    // save_format.cpp - Modern versioned save format (Phase 5)
+
+public:
+
+    /**
+     * @brief Save game in modern versioned format.
+     * @param filename Path to save file.
+     * @param includeJson Include JSON metadata section.
+     * @return Result code indicating success or failure type.
+     */
+    SaveResult saveFileModern(const std::string& filename, bool includeJson = false);
+
+    /**
+     * @brief Load game from modern format (with legacy fallback).
+     * @param filename Path to save file.
+     * @return Result code indicating success or failure type.
+     */
+    SaveResult loadFileModern(const std::string& filename);
+
+    /**
+     * @brief Export game state to JSON format (human-readable).
+     * @param filename Path to JSON file.
+     * @return True if export succeeded.
+     */
+    bool exportToJson(const std::string& filename) const;
+
+    /**
+     * @brief Detect save file format type.
+     * @param filename Path to save file.
+     * @param isModern Set to true if modern format.
+     * @param isLegacy Set to true if legacy format.
+     * @return Result code indicating success or failure type.
+     */
+    SaveResult detectSaveFormat(const std::string& filename, bool& isModern, bool& isLegacy);
+
+private:
+
+    /**
+     * @brief Build JSON metadata string for save file.
+     * @return JSON string with metadata.
+     */
+    std::string buildSaveMetadataJson() const;
 
 
     ////////////////////////////////////////////////////////////////////////
@@ -1939,8 +2004,16 @@ public:
 
 private:
 
-    short *cellSrc;
+    /**
+     * Cell automaton source buffer for heat simulation.
+     * Size: (WORLD_W + 2) * (WORLD_H + 2) elements for wrap-around boundaries.
+     */
+    std::vector<short> cellSrcStorage;
 
+    /**
+     * Pointer to destination cells (points to map data).
+     * This is a non-owning pointer - the map owns the storage.
+     */
     short *cellDst;
 
 
@@ -1957,7 +2030,12 @@ private:
 public:
 
 
-    Quad cityPopLast;   ///< Population of last city class check. @see CheckGrowth
+    /**
+     * Population of last city class check.
+     * @see CheckGrowth
+     * MODERNIZATION (Phase 2): Changed from Quad to Population (int64_t) for overflow safety.
+     */
+    Population cityPopLast;
     short categoryLast; ///< City class of last city class check. @see CheckGrowth
 
     /**
@@ -2102,7 +2180,11 @@ public:
     bool comCap; ///< Block commercial growth
     bool indCap; ///< Block industrial growth
 
-    short cashFlow;
+    /**
+     * Current cash flow (income minus expenses).
+     * MODERNIZATION (Phase 2): Changed from short to Funds (int64_t) for overflow safety.
+     */
+    Funds cashFlow;
 
     float externalMarket;
 
@@ -2320,7 +2402,11 @@ public:
 public:
 
 
-    Quad totalFunds; ///< Funds of the player
+    /**
+     * Funds of the player.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
+     */
+    Funds totalFunds;
 
     /**
      * Enable auto-bulldoze
@@ -2394,8 +2480,18 @@ public:
 
     Quad tickCount();
 
+    /**
+     * @deprecated Use std::vector or std::make_unique instead.
+     * Legacy malloc wrapper - kept for backward compatibility only.
+     */
+    [[deprecated("Use std::vector or std::make_unique instead")]]
     Ptr newPtr(int size);
 
+    /**
+     * @deprecated Memory is now managed by std::vector/unique_ptr.
+     * Legacy free wrapper - kept for backward compatibility only.
+     */
+    [[deprecated("Memory is now managed by RAII containers")]]
     void freePtr(void *data);
 
     void doStartScenario(int scenario);
@@ -2651,7 +2747,11 @@ public:
 
     Quad cityMonthLast;
 
-    Quad totalFundsLast;
+    /**
+     * Last tracked totalFunds value for change detection.
+     * MODERNIZATION (Phase 2): Changed from Quad to Funds (int64_t) for overflow safety.
+     */
+    Funds totalFundsLast;
 
     Quad resLast;
 

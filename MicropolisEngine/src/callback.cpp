@@ -79,7 +79,8 @@
 
 
 #include "micropolis.h"
-#include <emscripten.h>
+// Note: emscripten.h is now included via platform.h for Emscripten builds
+// Native builds use stub macros defined in platform.h
 
 
 ConsoleCallback::~ConsoleCallback() {

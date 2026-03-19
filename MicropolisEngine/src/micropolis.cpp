@@ -101,7 +101,9 @@ Micropolis::Micropolis() :
         fireStationEffectMap(0),
         policeStationMap(0),
         policeStationEffectMap(0),
-        comRateMap(0)
+        comRateMap(0),
+        callback(nullptr),
+        callbackVal()
 {
     initMapArrays();
 }
@@ -129,7 +131,7 @@ void Micropolis::setCallback(Callback *callback0, emscripten::val callbackVal0)
 void Micropolis::init()
 {
     printf("init");
-    
+
     ////////////////////////////////////////////////////////////////////////
     // allocate.cpp
 
@@ -291,7 +293,6 @@ void Micropolis::init()
     policeStationEffectMap.clear();
     comRateMap.clear();
 
-
     ////////////////////////////////////////////////////////////////////////
     // budget.cpp
 
@@ -432,11 +433,11 @@ void Micropolis::init()
     // bool doNotices;
     doNotices = true;
 
-    // short *cellSrc;
-    cellSrc = NULL;
+    // cellSrcStorage is a std::vector - automatically initialized empty
+    // cellSrcStorage will be resized on first use in simHeat()
 
     // short *cellDst;
-    cellDst = NULL;
+    cellDst = nullptr;
 
 
     ////////////////////////////////////////////////////////////////////////
@@ -505,7 +506,6 @@ void Micropolis::init()
 
     ////////////////////////////////////////////////////////////////////////
     // simulate.cpp
-
 
     valveFlag = false;
 
@@ -783,10 +783,14 @@ void Micropolis::simHeat()
     const int SRCCOL = WORLD_H + 2;
     const int DSTCOL = WORLD_H;
 
-    if (cellSrc == NULL) {
-        cellSrc = (short *)newPtr((WORLD_W + 2) * (WORLD_H + 2) * sizeof (short));
-        cellDst = (short *)&map[0][0];
+    // MODERNIZATION (Phase 2): Use vector storage with local pointer for compatibility
+    if (cellSrcStorage.empty()) {
+        cellSrcStorage.resize((WORLD_W + 2) * (WORLD_H + 2), 0);
+        cellDst = reinterpret_cast<short *>(&map[0][0]);
     }
+
+    // Local pointer for pointer arithmetic (points to vector storage)
+    short *cellSrc = cellSrcStorage.data();
 
     src = cellSrc + SRCCOL + 1;
     dst = cellDst;
@@ -1188,7 +1192,8 @@ void Micropolis::setTile(int x, int y, int tile)
  */
 void *Micropolis::getMapBuffer()
 {
-    return (void *)mapBase;
+    // MODERNIZATION (Phase 2): Use vector storage
+    return static_cast<void *>(mapBaseStorage.data());
 }
 
 
@@ -1553,7 +1558,8 @@ void *Micropolis::getPoliceCoverageMapBuffer()
 
 long Micropolis::getMapAddress()
 {
-    return (long)mapBase;
+    // MODERNIZATION (Phase 2): Use vector storage
+    return reinterpret_cast<long>(mapBaseStorage.data());
 }
 
 
@@ -1565,7 +1571,8 @@ long Micropolis::getMapSize()
 
 long Micropolis::getMopAddress()
 {
-    return (long)mopBase;
+    // MODERNIZATION (Phase 2): Use vector storage
+    return reinterpret_cast<long>(mopBaseStorage.data());
 }
 
 

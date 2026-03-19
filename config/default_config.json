@@ -1,0 +1,36 @@
+{
+  "traffic": {
+    "maxSearchDistance": 30,
+    "trafficCostWeight": 0.0,
+    "randomizationFactor": 0.0,
+    "useAStar": false
+  },
+  "power": {
+    "coalPowerStrength": 700,
+    "nuclearPowerStrength": 2000
+  },
+  "budget": {
+    "defaultTaxRate": 7,
+    "defaultRoadPercent": 1.0,
+    "defaultPolicePercent": 1.0,
+    "defaultFirePercent": 1.0,
+    "startingFunds": 20000
+  },
+  "disasters": {
+    "enableDisasters": true,
+    "earthquakeFrequency": 480,
+    "fireFrequency": 100,
+    "floodFrequency": 3000,
+    "tornadoFrequency": 60,
+    "meltdownFrequency": 30000
+  },
+  "world": {
+    "width": 120,
+    "height": 100
+  },
+  "simulation": {
+    "censusFrequency": 4,
+    "taxFrequency": 48,
+    "evaluationFrequency": 12
+  }
+}

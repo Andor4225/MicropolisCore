@@ -78,6 +78,8 @@
 #ifndef H_POSITION
 #define H_POSITION
 
+#include "world_dimensions.h"
+
 
 /** Another direction enumeration class, with 8 possible directions.
  * @todo Eliminate #Direction.
@@ -176,8 +178,7 @@ public:
  */
 inline bool Position::testBounds()
 {
-    return (this->posX >= 0 && this->posX < WORLD_W
-                && this->posY >= 0 && this->posY < WORLD_H);
+    return ::isOnMap(this->posX, this->posY);
 }
 
 /**

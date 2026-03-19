@@ -1,0 +1,8 @@
+{
+  "model": "sonnet",
+  "permissions": {
+    "allow": [
+      "Bash(\"../build/bin/Release/golden_master.exe\" --generate)"
+    ]
+  }
+}

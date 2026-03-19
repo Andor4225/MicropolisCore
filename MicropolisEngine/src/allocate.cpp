@@ -84,57 +84,67 @@
 
 ////////////////////////////////////////////////////////////////////////
 
-/** Allocate and initialize arrays for the maps */
+/**
+ * Allocate and initialize arrays for the maps.
+ *
+ * MODERNIZATION (Phase 2):
+ * - Replaced malloc/newPtr with std::vector for automatic memory management
+ * - History arrays now use std::vector<short> with proper element counts
+ * - Map storage uses std::vector but maintains pointer array for compatibility
+ */
 void Micropolis::initMapArrays()
 {
-    short i;
-
-    if (!mapBase) {
-        mapBase = (unsigned short *)newPtr(
-            sizeof(unsigned short) *
-            WORLD_W * WORLD_H);
+    // Allocate map storage using vectors (RAII - automatic cleanup)
+    if (mapBaseStorage.empty()) {
+        mapBaseStorage.resize(WORLD_W * WORLD_H, 0);
     }
 
-    if (!mopBase) {
-        mopBase = (unsigned short *)newPtr(
-            sizeof(unsigned short) *
-            WORLD_W * WORLD_H);
+    if (mopBaseStorage.empty()) {
+        mopBaseStorage.resize(WORLD_W * WORLD_H, 0);
     }
 
-    for (i = 0; i < WORLD_W; i++) {
-        map[i] = (unsigned short *)(mapBase + (i * WORLD_H));
-        mop[i] = (unsigned short *)(mopBase + (i * WORLD_H));
+    // Set up pointer array to access map storage by column
+    // This maintains compatibility with existing map[x][y] access pattern
+    for (int i = 0; i < WORLD_W; i++) {
+        map[i] = mapBaseStorage.data() + (i * WORLD_H);
+        mop[i] = mopBaseStorage.data() + (i * WORLD_H);
     }
 
-    resHist = (short *)newPtr(HISTORY_LENGTH);
-    comHist = (short *)newPtr(HISTORY_LENGTH);
-    indHist = (short *)newPtr(HISTORY_LENGTH);
-    moneyHist = (short *)newPtr(HISTORY_LENGTH);
-    pollutionHist = (short *)newPtr(HISTORY_LENGTH);
-    crimeHist = (short *)newPtr(HISTORY_LENGTH);
-    miscHist = (short *)newPtr(MISC_HISTORY_LENGTH);
-
+    // Initialize history vectors with proper element counts
+    // HISTORY_ELEMENT_COUNT = 240 elements (480 bytes / 2 bytes per short)
+    // MISC_HISTORY_ELEMENT_COUNT = 120 elements (240 bytes / 2 bytes per short)
+    resHist.resize(HISTORY_ELEMENT_COUNT, 0);
+    comHist.resize(HISTORY_ELEMENT_COUNT, 0);
+    indHist.resize(HISTORY_ELEMENT_COUNT, 0);
+    moneyHist.resize(HISTORY_ELEMENT_COUNT, 0);
+    pollutionHist.resize(HISTORY_ELEMENT_COUNT, 0);
+    crimeHist.resize(HISTORY_ELEMENT_COUNT, 0);
+    miscHist.resize(MISC_HISTORY_ELEMENT_COUNT, 0);
 }
 
 
-/** Free all map arrays */
+/**
+ * Free all map arrays.
+ *
+ * MODERNIZATION (Phase 2):
+ * - Vectors automatically free memory when cleared (RAII)
+ * - No more manual null checks or freePtr calls
+ * - Memory safety guaranteed by std::vector
+ */
 void Micropolis::destroyMapArrays()
 {
-    printf("destroyMapArrays: mapBase: %p\n", mapBase);
+    // Clear map storage vectors (automatic memory deallocation)
+    mapBaseStorage.clear();
+    mapBaseStorage.shrink_to_fit();
 
-    if (mapBase != NULL) {
-        freePtr(mapBase);
-        mapBase = NULL;
-    }
+    mopBaseStorage.clear();
+    mopBaseStorage.shrink_to_fit();
 
-    if (mopBase != NULL) {
-        freePtr(mopBase);
-        mopBase = NULL;
-    }
+    // Clear pointer arrays
+    memset(map, 0, sizeof(unsigned short *) * WORLD_W);
+    memset(mop, 0, sizeof(unsigned short *) * WORLD_W);
 
-    memset(map, 0, sizeof(short *) * WORLD_W);
-    memset(mop, 0, sizeof(short *) * WORLD_W);
-
+    // Clear density maps (these were already vectors)
     populationDensityMap.clear();
     trafficDensityMap.clear();
     pollutionDensityMap.clear();
@@ -147,41 +157,27 @@ void Micropolis::destroyMapArrays()
 
     terrainDensityMap.clear();
 
-    if (resHist != NULL) {
-        freePtr(resHist);
-        resHist = NULL;
-    }
+    // Clear history vectors (automatic memory deallocation)
+    resHist.clear();
+    resHist.shrink_to_fit();
 
-    if (comHist != NULL) {
-        freePtr(comHist);
-        comHist = NULL;
-    }
+    comHist.clear();
+    comHist.shrink_to_fit();
 
-    if (indHist != NULL) {
-        freePtr(indHist);
-        indHist = NULL;
-    }
+    indHist.clear();
+    indHist.shrink_to_fit();
 
-    if (moneyHist != NULL) {
-        freePtr(moneyHist);
-        moneyHist = NULL;
-    }
+    moneyHist.clear();
+    moneyHist.shrink_to_fit();
 
-    if (pollutionHist != NULL) {
-        freePtr(pollutionHist);
-        pollutionHist = NULL;
-    }
+    pollutionHist.clear();
+    pollutionHist.shrink_to_fit();
 
-    if (crimeHist != NULL) {
-        freePtr(crimeHist);
-        crimeHist = NULL;
-    }
+    crimeHist.clear();
+    crimeHist.shrink_to_fit();
 
-    if (miscHist != NULL) {
-        freePtr(miscHist);
-        miscHist = NULL;
-    }
-
+    miscHist.clear();
+    miscHist.shrink_to_fit();
 }
 
 

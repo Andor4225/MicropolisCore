@@ -107,11 +107,12 @@ SimSprite *Micropolis::newSprite(const std::string &name, int type, int x, int y
 
     // If a sprite is available at the pool, use one.
     // else, allocate a new one.
+    // MODERNIZATION (Phase 2): Use new instead of malloc wrapper
     if (freeSprites) {
         sprite = freeSprites;
         freeSprites = sprite->next;
     } else {
-        sprite = (SimSprite *)newPtr(sizeof (SimSprite));
+        sprite = new SimSprite();
     }
 
     sprite->name = name;

@@ -163,13 +163,57 @@ static void half_swap_longs(long *buf, int len)
  * Load an array of short values from file to memory.
  *
  * Convert to the correct processor architecture, if necessary.
+ *
+ * MODERNIZATION (Phase 2 - Security):
+ * - Added bounds checking with expectedLen parameter
+ * - Validates buffer is large enough before reading
+ * - Prevents buffer overflow from malicious save files
+ *
+ * @param buf Buffer to put the loaded short values in.
+ * @param len Number of short values to load.
+ * @param expectedLen Expected buffer capacity (for bounds checking).
+ * @param f   File handle of the file to load from.
+ * @return Load was successful.
+ */
+static bool load_short_bounded(short *buf, int len, size_t expectedLen, FILE *f)
+{
+    // Security: Validate buffer bounds before reading
+    if (buf == nullptr || len <= 0) {
+        return false;
+    }
+
+    // Security: Prevent buffer overflow by checking expected capacity
+    if (static_cast<size_t>(len) > expectedLen) {
+        return false;
+    }
+
+    size_t result = fread(buf, sizeof(short), len, f);
+
+    if ((int)result != len) {
+         return false;
+    }
+
+    SWAP_SHORTS(buf, len);        /* to intel */
+
+    return true;
+}
+
+/**
+ * Load an array of short values from file to memory.
+ *
+ * Convert to the correct processor architecture, if necessary.
  * @param buf Buffer to put the loaded short values in.
  * @param len Number of short values to load.
  * @param f   File handle of the file to load from.
- * @return Load was succesfull.
+ * @return Load was successful.
+ * @deprecated Use load_short_bounded for bounds-checked loading.
  */
 static bool load_short(short *buf, int len, FILE *f)
 {
+    if (buf == nullptr || len <= 0) {
+        return false;
+    }
+
     size_t result = fread(buf, sizeof(short), len, f);
 
     if ((int)result != len) {
@@ -206,9 +250,15 @@ static bool save_short(short *buf, int len, FILE *f)
 
 /**
  * Load a city file from a given filename and (optionally) directory.
+ *
+ * MODERNIZATION (Phase 2 - Security):
+ * - Added file size validation before reading
+ * - Uses bounds-checked load functions
+ * - Validates file format magic values
+ *
  * @param filename Name of the file to load.
  * @param dir      If not \c NULL, name of the directory containing the file.
- * @return Load was succesfull.
+ * @return Load was successful.
  */
 bool Micropolis::loadFileData(const std::string &filename)
 {
@@ -227,6 +277,12 @@ bool Micropolis::loadFileData(const std::string &filename)
     size = ftell(f);
     fseek(f, 0L, SEEK_SET);
 
+    // Security: Validate file size is positive
+    if (size <= 0) {
+        fclose(f);
+        return false;
+    }
+
     int mapSizeShort = // 12000
       WORLD_W * WORLD_H;
     int mapSize = // 24000
@@ -243,24 +299,47 @@ bool Micropolis::loadFileData(const std::string &filename)
     bool isValid =
         hasMop || (size == mapFileSize);
 
+    // Security: Reject files that don't match expected sizes
+    if (!isValid) {
+        fclose(f);
+        return false;
+    }
+
+    // Calculate expected element counts for bounds checking
+    const size_t historyElements = HISTORY_LENGTH / sizeof(short);
+    const size_t miscHistoryElements = MISC_HISTORY_LENGTH / sizeof(short);
+
+    // Security: Verify vector capacities before loading
+    if (resHist.size() < historyElements ||
+        comHist.size() < historyElements ||
+        indHist.size() < historyElements ||
+        crimeHist.size() < historyElements ||
+        pollutionHist.size() < historyElements ||
+        moneyHist.size() < historyElements ||
+        miscHist.size() < miscHistoryElements ||
+        mapBaseStorage.size() < static_cast<size_t>(mapSizeShort)) {
+        fclose(f);
+        return false;
+    }
+
+    // MODERNIZATION (Phase 2): Use bounds-checked loading
     bool result =
-      isValid &&
-      load_short(resHist, HISTORY_LENGTH / sizeof(short), f) &&
-      load_short(comHist, HISTORY_LENGTH / sizeof(short), f) &&
-      load_short(indHist, HISTORY_LENGTH / sizeof(short), f) &&
-      load_short(crimeHist, HISTORY_LENGTH / sizeof(short), f) &&
-      load_short(pollutionHist, HISTORY_LENGTH / sizeof(short), f) &&
-      load_short(moneyHist, HISTORY_LENGTH / sizeof(short), f) &&
-      load_short(miscHist, MISC_HISTORY_LENGTH / sizeof(short), f) &&
-      load_short((short *)mapBase, mapSizeShort, f) &&
-      (hasMop 
-        ? load_short((short *)mopBase, mapSizeShort, f)
+      load_short_bounded(resHist.data(), historyElements, resHist.size(), f) &&
+      load_short_bounded(comHist.data(), historyElements, comHist.size(), f) &&
+      load_short_bounded(indHist.data(), historyElements, indHist.size(), f) &&
+      load_short_bounded(crimeHist.data(), historyElements, crimeHist.size(), f) &&
+      load_short_bounded(pollutionHist.data(), historyElements, pollutionHist.size(), f) &&
+      load_short_bounded(moneyHist.data(), historyElements, moneyHist.size(), f) &&
+      load_short_bounded(miscHist.data(), miscHistoryElements, miscHist.size(), f) &&
+      load_short_bounded(reinterpret_cast<short *>(mapBaseStorage.data()), mapSizeShort, mapBaseStorage.size(), f) &&
+      (hasMop
+        ? load_short_bounded(reinterpret_cast<short *>(mopBaseStorage.data()), mapSizeShort, mopBaseStorage.size(), f)
         : true);
 
     //printf("loadFileData: mapSize: %d historySize: %d mapFileSize: %d mopFileSize: %d size: %ld hasMop: %d isValid: %d result: %d\n", mapSize, historySize, mapFileSize, mopFileSize, size, hasMop, isValid, result);
 
     if (!hasMop) {
-        memset(mopBase, 0, WORLD_W * WORLD_H * sizeof(short));
+        std::fill(mopBaseStorage.begin(), mopBaseStorage.end(), 0);
     }
 
     fclose(f);
@@ -285,12 +364,13 @@ bool Micropolis::loadFile(const std::string &filename)
     /* total funds is a long.....    miscHist is array of shorts */
     /* total funds is being put in the 50th & 51th word of miscHist */
     /* find the address, cast the ptr to a longPtr, take contents */
+    // MODERNIZATION (Phase 2): Use .data() for pointer arithmetic
 
-    n = *(Quad *)(miscHist + 50);
+    n = *reinterpret_cast<Quad *>(miscHist.data() + 50);
     HALF_SWAP_LONGS(&n, 1);
     setFunds(n);
 
-    n = *(Quad *)(miscHist + 8);
+    n = *reinterpret_cast<Quad *>(miscHist.data() + 8);
     HALF_SWAP_LONGS(&n, 1);
     cityTime = n;
 
@@ -306,27 +386,27 @@ bool Micropolis::loadFile(const std::string &filename)
 
     /* yayaya */
 
-    n = *(Quad *)(miscHist + 58);
+    n = *reinterpret_cast<Quad *>(miscHist.data() + 58);
     HALF_SWAP_LONGS(&n, 1);
     policePercent = ((float)n) / ((float)65536);
 
-    n = *(Quad *)(miscHist + 60);
+    n = *reinterpret_cast<Quad *>(miscHist.data() + 60);
     HALF_SWAP_LONGS(&n, 1);
     firePercent = (float)n / (float)65536.0;
 
-    n = *(Quad *)(miscHist + 62);
+    n = *reinterpret_cast<Quad *>(miscHist.data() + 62);
     HALF_SWAP_LONGS(&n, 1);
     roadPercent = (float)n / (float)65536.0;
 
     policePercent =
-        (float)(*(Quad*)(miscHist + 58)) /
-        (float)65536.0;   /* and 59 */
+        static_cast<float>(*reinterpret_cast<Quad*>(miscHist.data() + 58)) /
+        65536.0f;   /* and 59 */
     firePercent =
-        (float)(*(Quad*)(miscHist + 60)) /
-        (float)65536.0;   /* and 61 */
+        static_cast<float>(*reinterpret_cast<Quad*>(miscHist.data() + 60)) /
+        65536.0f;   /* and 61 */
     roadPercent =
-        (float)(*(Quad*)(miscHist + 62)) /
-        (float)65536.0;   /* and 63 */
+        static_cast<float>(*reinterpret_cast<Quad*>(miscHist.data() + 62)) /
+        65536.0f;   /* and 63 */
 
     cityTime = max((Quad)0, cityTime);
 
@@ -374,14 +454,15 @@ bool Micropolis::saveFile(const std::string &filename)
     /* total funds is a long.....    miscHist is array of ints */
     /* total funds is bien put in the 50th & 51th word of miscHist */
     /* find the address, cast the ptr to a longPtr, take contents */
+    // MODERNIZATION (Phase 2): Use .data() for pointer arithmetic
 
     n = totalFunds;
     HALF_SWAP_LONGS(&n, 1);
-    (*(Quad *)(miscHist + 50)) = n;
+    *reinterpret_cast<Quad *>(miscHist.data() + 50) = n;
 
     n = cityTime;
     HALF_SWAP_LONGS(&n, 1);
-    (*(Quad *)(miscHist + 8)) = n;
+    *reinterpret_cast<Quad *>(miscHist.data() + 8) = n;
 
     miscHist[52] = autoBulldoze;   // flag for autoBulldoze
     miscHist[53] = autoBudget;     // flag for autoBudget
@@ -394,26 +475,27 @@ bool Micropolis::saveFile(const std::string &filename)
 
     n = (int)(policePercent * 65536);
     HALF_SWAP_LONGS(&n, 1);
-    (*(Quad *)(miscHist + 58)) = n;
+    *reinterpret_cast<Quad *>(miscHist.data() + 58) = n;
 
     n = (int)(firePercent * 65536);
     HALF_SWAP_LONGS(&n, 1);
-    (*(Quad *)(miscHist + 60)) = n;
+    *reinterpret_cast<Quad *>(miscHist.data() + 60) = n;
 
     n = (int)(roadPercent * 65536);
     HALF_SWAP_LONGS(&n, 1);
-    (*(Quad *)(miscHist + 62)) = n;
+    *reinterpret_cast<Quad *>(miscHist.data() + 62) = n;
 
+    // MODERNIZATION (Phase 2): Use .data() for vector access
     bool result =
-        save_short(resHist, HISTORY_LENGTH / 2, f) &&
-        save_short(comHist, HISTORY_LENGTH / 2, f) &&
-        save_short(indHist, HISTORY_LENGTH / 2, f) &&
-        save_short(crimeHist, HISTORY_LENGTH / 2, f) &&
-        save_short(pollutionHist, HISTORY_LENGTH / 2, f) &&
-        save_short(moneyHist, HISTORY_LENGTH / 2, f) &&
-        save_short(miscHist, MISC_HISTORY_LENGTH / 2, f) &&
-        save_short(((short *)&map[0][0]), WORLD_W * WORLD_H, f) &&
-        save_short(((short *)&mop[0][0]), WORLD_W * WORLD_H, f);
+        save_short(resHist.data(), HISTORY_LENGTH / 2, f) &&
+        save_short(comHist.data(), HISTORY_LENGTH / 2, f) &&
+        save_short(indHist.data(), HISTORY_LENGTH / 2, f) &&
+        save_short(crimeHist.data(), HISTORY_LENGTH / 2, f) &&
+        save_short(pollutionHist.data(), HISTORY_LENGTH / 2, f) &&
+        save_short(moneyHist.data(), HISTORY_LENGTH / 2, f) &&
+        save_short(miscHist.data(), MISC_HISTORY_LENGTH / 2, f) &&
+        save_short(reinterpret_cast<short *>(map[0]), WORLD_W * WORLD_H, f) &&
+        save_short(reinterpret_cast<short *>(mop[0]), WORLD_W * WORLD_H, f);
 
     fclose(f);
 

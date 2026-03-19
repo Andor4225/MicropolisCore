@@ -79,18 +79,21 @@
 #ifndef H_MAP_TYPE
 #define H_MAP_TYPE
 
+#include "world_dimensions.h"
+#include <vector>
 
 ////////////////////////////////////////////////////////////////////////
 // Constants
 
-
 /**
- * Size of the world in horizontal direction.
+ * Default size of the world in horizontal direction (for backward compatibility).
+ * @note Use worldWidth() for runtime-configurable dimensions.
  */
 static const int WORLD_W = 120;
 
 /**
- * Size of the world in vertical direction.
+ * Default size of the world in vertical direction (for backward compatibility).
+ * @note Use worldHeight() for runtime-configurable dimensions.
  */
 static const int WORLD_H = 100;
 
@@ -102,9 +105,14 @@ static const int WORLD_H = 100;
 /**
  * Generic class for maps in the Micropolis game.
  *
- * A map is assumed to cover a 2D grid of #WORLD_W times #WORLD_H positions.
+ * A map is assumed to cover a 2D grid of configurable dimensions.
  * A block of positions may be clustered, and represented by a single data
  * value.
+ *
+ * MODERNIZATION (Phase 4):
+ * Updated to use dynamic allocation for runtime-configurable world sizes.
+ * Uses WorldDimensions singleton for dimension queries.
+ *
  * @tparam DATA    Data type of a data value.
  * @tparam BLKSIZE Size of the cluster.
  */
@@ -119,11 +127,19 @@ public:
 
     /** Size of a cluster in number of world positions. */
     const int MAP_BLOCKSIZE;
-    const int MAP_W; ///< Number of clusters in horizontal direction.
-    const int MAP_H; ///< Number of clusters in vertical direction.
+    int MAP_W; ///< Number of clusters in horizontal direction.
+    int MAP_H; ///< Number of clusters in vertical direction.
 
     void fill(DATA val);
     void clear();
+
+    /**
+     * @brief Resize map for new world dimensions.
+     *
+     * Call this if world dimensions change after construction.
+     * Clears all data to default value.
+     */
+    void resize();
 
     inline void set(int x, int y, DATA val);
     inline DATA get(int x, int y) const;
@@ -136,17 +152,22 @@ public:
     DATA *getBase();
 
     inline size_t getTotalByteSize() const {
-        return sizeof(DATA) * 
-               ((WORLD_W + BLKSIZE - 1) / BLKSIZE) *
-               ((WORLD_H + BLKSIZE - 1) / BLKSIZE);
+        return sizeof(DATA) * MAP_W * MAP_H;
     }
+
+    /** Get world width used by this map. */
+    int getWorldWidth() const { return worldWidth_; }
+
+    /** Get world height used by this map. */
+    int getWorldHeight() const { return worldHeight_; }
 
 private:
     /** Data fields of the map in column-major mode. */
-    DATA _mapData[((WORLD_W + BLKSIZE - 1) / BLKSIZE) *
-                  ((WORLD_H + BLKSIZE - 1) / BLKSIZE)];
+    std::vector<DATA> _mapData;
 
-    const DATA _MAP_DEFAULT_VALUE; ///< Default value of a cluster.
+    DATA _MAP_DEFAULT_VALUE; ///< Default value of a cluster.
+    int worldWidth_;  ///< World width at time of allocation
+    int worldHeight_; ///< World height at time of allocation
 };
 
 
@@ -158,10 +179,14 @@ private:
 template <typename DATA, int BLKSIZE>
 Map<DATA, BLKSIZE>::Map(DATA defaultValue):
             MAP_BLOCKSIZE(BLKSIZE),
-            MAP_W((WORLD_W + BLKSIZE - 1) / BLKSIZE),
-            MAP_H((WORLD_H + BLKSIZE - 1) / BLKSIZE),
-            _MAP_DEFAULT_VALUE(defaultValue)
+            MAP_W((::worldWidth() + BLKSIZE - 1) / BLKSIZE),
+            MAP_H((::worldHeight() + BLKSIZE - 1) / BLKSIZE),
+            _mapData(),
+            _MAP_DEFAULT_VALUE(defaultValue),
+            worldWidth_(::worldWidth()),
+            worldHeight_(::worldHeight())
 {
+    _mapData.resize(MAP_W * MAP_H, defaultValue);
 }
 
 
@@ -169,13 +194,13 @@ Map<DATA, BLKSIZE>::Map(DATA defaultValue):
 template <typename DATA, int BLKSIZE>
 Map<DATA, BLKSIZE>::Map(const Map<DATA, BLKSIZE> &map):
             MAP_BLOCKSIZE(BLKSIZE),
-            MAP_W((WORLD_W + BLKSIZE - 1) / BLKSIZE),
-            MAP_H((WORLD_H + BLKSIZE - 1) / BLKSIZE),
-            _MAP_DEFAULT_VALUE(map._MAP_DEFAULT_VALUE)
+            MAP_W(map.MAP_W),
+            MAP_H(map.MAP_H),
+            _mapData(map._mapData),
+            _MAP_DEFAULT_VALUE(map._MAP_DEFAULT_VALUE),
+            worldWidth_(map.worldWidth_),
+            worldHeight_(map.worldHeight_)
 {
-    for (int i = 0; i < this->MAP_W * this->MAP_H; i++) {
-        this->_mapData[i] = map._mapData[i];
-    }
 }
 
 
@@ -226,13 +251,31 @@ void Map<DATA, BLKSIZE>::clear()
 
 
 /**
+ * Resize the map for new world dimensions.
+ *
+ * Call this if world dimensions change after construction.
+ * Clears all data to default value.
+ */
+template <typename DATA, int BLKSIZE>
+void Map<DATA, BLKSIZE>::resize()
+{
+    worldWidth_ = ::worldWidth();
+    worldHeight_ = ::worldHeight();
+    MAP_W = (worldWidth_ + BLKSIZE - 1) / BLKSIZE;
+    MAP_H = (worldHeight_ + BLKSIZE - 1) / BLKSIZE;
+    _mapData.resize(MAP_W * MAP_H);
+    fill(_MAP_DEFAULT_VALUE);
+}
+
+
+/**
  * Return the base address of the map data.
  * @note Data is stored in column-major mode.
  */
 template <typename DATA, int BLKSIZE>
 DATA *Map<DATA, BLKSIZE>::getBase()
 {
-    return this->_mapData;
+    return this->_mapData.data();
 }
 
 
@@ -334,7 +377,7 @@ inline DATA Map<DATA, BLKSIZE>::worldGet(int x, int y) const
 template <typename DATA, int BLKSIZE>
 inline bool Map<DATA, BLKSIZE>::worldOnMap(int x, int y) const
 {
-    return (x >= 0 && x < WORLD_W) && (y >= 0 && y < WORLD_H);
+    return (x >= 0 && x < worldWidth_) && (y >= 0 && y < worldHeight_);
 }
 
 

@@ -193,10 +193,13 @@ void Micropolis::doPopNum()
     cityClass = getCityClass(cityPop);
 }
 
-/** Compute city population. */
-Quad Micropolis::getPopulation()
+/**
+ * Compute city population.
+ * MODERNIZATION (Phase 2): Return type changed to Population (int64_t).
+ */
+Population Micropolis::getPopulation()
 {
-    Quad pop = (resPop + (comPop + indPop) * 8L) * 20L;
+    Population pop = (resPop + (comPop + indPop) * 8LL) * 20LL;
     return pop;
 }
 
@@ -206,8 +209,9 @@ Quad Micropolis::getPopulation()
  * @param cityPopulation Number of people in the city.
  * @return City classification.
  * @todo Put people counts into a table.
+ * MODERNIZATION (Phase 2): Parameter type changed to Population (int64_t).
  */
-CityClass Micropolis::getCityClass(Quad cityPopulation)
+CityClass Micropolis::getCityClass(Population cityPopulation)
 {
     CityClass cityClassification = CC_VILLAGE;
 
